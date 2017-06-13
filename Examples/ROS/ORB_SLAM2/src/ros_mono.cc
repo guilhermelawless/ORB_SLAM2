@@ -18,11 +18,9 @@
 * along with ORB-SLAM2. If not, see <http://www.gnu.org/licenses/>.
 */
 
-
 #include<iostream>
 #include<algorithm>
 #include<fstream>
-#include<chrono>
 
 #include <ros/ros.h>
 #include <signal.h>
@@ -31,20 +29,27 @@
 #include<opencv2/core/core.hpp>
 
 #include"System.h"
+#include"Utils.h"
 
 using namespace std;
-
-ORB_SLAM2::System *SLAM;
 
 class ImageGrabber
 {
 public:
-    ImageGrabber(ORB_SLAM2::System* pSLAM):mpSLAM(pSLAM){}
+    float scale;
+    unsigned long nImages{0};
+    double totalRescaleTime{0.0};
+
+public:
+    ImageGrabber(ORB_SLAM2::System* pSLAM, float _scale=1.0):scale(_scale), mpSLAM(pSLAM){}
 
     void GrabImage(const sensor_msgs::ImageConstPtr& msg);
 
     ORB_SLAM2::System* mpSLAM;
 };
+
+ORB_SLAM2::System *SLAM;
+ImageGrabber *igb;
 
 void SlamShutdown(int sig)
 {
@@ -58,6 +63,12 @@ void SlamShutdown(int sig)
     // Delete SLAM system
     delete SLAM;
 
+    // Measure time and delete ImageGrabber object
+    cout << "Total time spent rescaling " << nanoToMilli(igb->totalRescaleTime) << " milliseconds" << endl;
+    cout << "Given " << igb->nImages << " images, time per image was " << nanoToMilli(igb->totalRescaleTime/igb->nImages) << " milliseconds" << endl;
+
+    delete igb;
+
     ros::shutdown();
 }
 
@@ -66,20 +77,25 @@ int main(int argc, char **argv)
     ros::init(argc, argv, "Mono");
     ros::start();
 
-    if(argc != 3)
+    if(argc < 3)
     {
-        cerr << endl << "Usage: rosrun ORB_SLAM2 Mono path_to_vocabulary path_to_settings" << endl;        
+        cerr << endl << "Usage: rosrun ORB_SLAM2 Mono path_to_vocabulary path_to_settings [scale]" << endl;
         ros::shutdown();
         return 1;
-    }    
+    }
+
+    float scale = 1.0;
+    if(argc >= 4){
+        scale = atof(argv[3]);
+    }
 
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
-    SLAM = new ORB_SLAM2::System(argv[1],argv[2],ORB_SLAM2::System::MONOCULAR,true);
+    SLAM = new ORB_SLAM2::System(argv[1],argv[2],ORB_SLAM2::System::MONOCULAR,true,scale);
 
-    ImageGrabber igb(SLAM);
+    igb = new ImageGrabber(SLAM, scale);
 
     ros::NodeHandle nodeHandler;
-    ros::Subscriber sub = nodeHandler.subscribe("/camera/image_raw", 1, &ImageGrabber::GrabImage,&igb);
+    ros::Subscriber sub = nodeHandler.subscribe("/camera/image_raw", 1, &ImageGrabber::GrabImage,igb);
 
     signal(SIGINT, SlamShutdown);
 
@@ -102,7 +118,17 @@ void ImageGrabber::GrabImage(const sensor_msgs::ImageConstPtr& msg)
         return;
     }
 
-    mpSLAM->TrackMonocular(cv_ptr->image,cv_ptr->header.stamp.toSec());
+    if(scale != 1.0) {
+        cv::Size new_dimensions( int(scale * cv_ptr->image.rows), int(scale * cv_ptr->image.cols));
+        cv::Mat resized;
+
+        totalRescaleTime += funcTime(cv::resize, cv_ptr->image, resized, new_dimensions, 0, 0, cv::INTER_LINEAR);
+        ++nImages;
+
+        mpSLAM->TrackMonocular(resized,cv_ptr->header.stamp.toSec());
+    }
+    else
+        mpSLAM->TrackMonocular(cv_ptr->image,cv_ptr->header.stamp.toSec());
 }
 
 
