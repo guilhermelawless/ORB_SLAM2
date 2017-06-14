@@ -51,7 +51,7 @@ set_property(TARGET libORB_SLAM2 PROPERTY IMPORTED_LOCATION ${ORB_SLAM2_SOURCE_D
 catkin_package(
   INCLUDE_DIRS ${orb_slam2_INCLUDE_DIRS}
   LIBRARIES libORB_SLAM2 ${orb_slam2_LIBRARIES}
-  DEPENDS OpenCV Pangolin Eigen3
+  DEPENDS OpenCV Pangolin
 )
 
 
