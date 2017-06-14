@@ -64,8 +64,11 @@ void SlamShutdown(int sig)
     delete SLAM;
 
     // Measure time and delete ImageGrabber object
-    cout << "Total time spent rescaling " << nanoToMilli(igb->totalRescaleTime) << " milliseconds" << endl;
-    cout << "Given " << igb->nImages << " images, time per image was " << nanoToMilli(igb->totalRescaleTime/igb->nImages) << " milliseconds" << endl;
+    if(igb->scale != 1.0) {
+        cout << "Total time spent rescaling " << nanoToMilli(igb->totalRescaleTime) << " milliseconds" << endl;
+        cout << "Given " << igb->nImages << " images, time per image was "
+             << nanoToMilli(igb->totalRescaleTime / igb->nImages) << " milliseconds" << endl;
+    }
 
     delete igb;
 
@@ -86,7 +89,7 @@ int main(int argc, char **argv)
 
     float scale = 1.0;
     if(argc >= 4){
-        scale = atof(argv[3]);
+        scale = (float) atof(argv[3]);
     }
 
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
@@ -95,7 +98,13 @@ int main(int argc, char **argv)
     igb = new ImageGrabber(SLAM, scale);
 
     ros::NodeHandle nodeHandler;
-    ros::Subscriber sub = nodeHandler.subscribe("/camera/image_raw", 1, &ImageGrabber::GrabImage,igb);
+    ros::NodeHandle pnh("~");
+
+    // Get camera topic
+    string video{"/camera/image_raw"};
+    pnh.getParam("cameraTopic", video);
+
+    ros::Subscriber sub = nodeHandler.subscribe(video, 1, &ImageGrabber::GrabImage,igb);
 
     signal(SIGINT, SlamShutdown);
 
@@ -119,16 +128,17 @@ void ImageGrabber::GrabImage(const sensor_msgs::ImageConstPtr& msg)
     }
 
     if(scale != 1.0) {
-        cv::Size new_dimensions( int(scale * cv_ptr->image.rows), int(scale * cv_ptr->image.cols));
+        cv::Size new_dimensions( int(scale * msg->width), int(scale * msg->height));
         cv::Mat resized;
 
         totalRescaleTime += funcTime(cv::resize, cv_ptr->image, resized, new_dimensions, 0, 0, cv::INTER_LINEAR);
-        ++nImages;
 
         mpSLAM->TrackMonocular(resized,cv_ptr->header.stamp.toSec());
     }
     else
         mpSLAM->TrackMonocular(cv_ptr->image,cv_ptr->header.stamp.toSec());
+
+    ++nImages;
 }
 
 
