@@ -40,7 +40,7 @@ class Viewer;
 class FrameDrawer
 {
 public:
-    FrameDrawer(Map* pMap);
+    FrameDrawer(Map* pMap, const bool drawOutliers=false);
 
     // Update info from the last processed frame.
     void Update(Tracking *pTracker);
@@ -56,9 +56,10 @@ protected:
     cv::Mat mIm;
     int N;
     vector<cv::KeyPoint> mvCurrentKeys;
-    vector<bool> mvbMap, mvbVO;
+    vector<bool> mvbMap, mvbVO, mvbOutlier;
     bool mbOnlyTracking;
-    int mnTracked, mnTrackedVO;
+    bool mbDrawOutliers;
+    int mnTracked, mnTrackedVO, mnOutlier;
     vector<cv::KeyPoint> mvIniKeys;
     vector<int> mvIniMatches;
     int mState;

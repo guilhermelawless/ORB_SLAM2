@@ -29,7 +29,7 @@
 namespace ORB_SLAM2
 {
 
-FrameDrawer::FrameDrawer(Map* pMap):mpMap(pMap)
+FrameDrawer::FrameDrawer(Map* pMap, const bool drawOutliers):mbDrawOutliers(drawOutliers), mpMap(pMap)
 {
     mState=Tracking::SYSTEM_NOT_READY;
     mIm = cv::Mat(480,640,CV_8UC3, cv::Scalar(0,0,0));
@@ -42,6 +42,7 @@ cv::Mat FrameDrawer::DrawFrame()
     vector<int> vMatches; // Initialization: correspondeces with reference keypoints
     vector<cv::KeyPoint> vCurrentKeys; // KeyPoints in current frame
     vector<bool> vbVO, vbMap; // Tracked MapPoints in current frame
+    vector<bool> vbOutlier; // Outliers in current frame
     int state; // Tracking state
 
     //Copy variables within scoped mutex
@@ -64,6 +65,7 @@ cv::Mat FrameDrawer::DrawFrame()
             vCurrentKeys = mvCurrentKeys;
             vbVO = mvbVO;
             vbMap = mvbMap;
+            vbOutlier = mvbOutlier;
         }
         else if(mState==Tracking::LOST)
         {
@@ -90,11 +92,12 @@ cv::Mat FrameDrawer::DrawFrame()
     {
         mnTracked=0;
         mnTrackedVO=0;
+        mnOutlier=0;
         const float r = 5;
         const int n = vCurrentKeys.size();
         for(int i=0;i<n;i++)
         {
-            if(vbVO[i] || vbMap[i])
+            if(vbVO[i] || vbMap[i] || (vbOutlier[i] && mbDrawOutliers) )
             {
                 cv::Point2f pt1,pt2;
                 pt1.x=vCurrentKeys[i].pt.x-r;
@@ -102,8 +105,15 @@ cv::Mat FrameDrawer::DrawFrame()
                 pt2.x=vCurrentKeys[i].pt.x+r;
                 pt2.y=vCurrentKeys[i].pt.y+r;
 
+                // This is an outlier
+                if(vbOutlier[i] && mbDrawOutliers)
+                {
+                    cv::rectangle(im,pt1,pt2,cv::Scalar(0,0,255));
+                    cv::circle(im,vCurrentKeys[i].pt,2,cv::Scalar(0,0,255),-1);
+                    mnOutlier++;
+                }
                 // This is a match to a MapPoint in the map
-                if(vbMap[i])
+                else if(vbMap[i])
                 {
                     cv::rectangle(im,pt1,pt2,cv::Scalar(0,255,0));
                     cv::circle(im,vCurrentKeys[i].pt,2,cv::Scalar(0,255,0),-1);
@@ -144,6 +154,8 @@ void FrameDrawer::DrawTextInfo(cv::Mat &im, int nState, cv::Mat &imText)
         s << "KFs: " << nKFs << ", MPs: " << nMPs << ", Matches: " << mnTracked;
         if(mnTrackedVO>0)
             s << ", + VO matches: " << mnTrackedVO;
+        if(mnOutlier>0)
+            s << ", + Outliers: " << mnOutlier;
     }
     else if(nState==Tracking::LOST)
     {
@@ -172,6 +184,7 @@ void FrameDrawer::Update(Tracking *pTracker)
     N = mvCurrentKeys.size();
     mvbVO = vector<bool>(N,false);
     mvbMap = vector<bool>(N,false);
+    mvbOutlier = vector<bool>(N,false);
     mbOnlyTracking = pTracker->mbOnlyTracking;
 
 
@@ -194,6 +207,8 @@ void FrameDrawer::Update(Tracking *pTracker)
                     else
                         mvbVO[i]=true;
                 }
+                else
+                    mvbOutlier[i]=true;
             }
         }
     }

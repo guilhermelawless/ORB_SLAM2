@@ -82,9 +82,9 @@ int main(int argc, char **argv)
 
     if(argc < 3)
     {
-        cerr << endl << "Usage: rosrun ORB_SLAM2 Mono path_to_vocabulary path_to_settings [scale]" << endl;
+        cerr << endl << "Usage: rosrun ORB_SLAM2 Mono path_to_vocabulary path_to_settings [scale drawOutliers]" << endl;
         ros::shutdown();
-        return 1;
+        return EXIT_FAILURE;
     }
 
     float scale = 1.0;
@@ -92,8 +92,18 @@ int main(int argc, char **argv)
         scale = (float) atof(argv[3]);
     }
 
+    bool drawOutliers = false;
+    if(argc >= 5){
+        std::stringstream ss(argv[4]);
+        if(!(ss >> std::boolalpha >> drawOutliers)){
+            cerr << "Invalid value for drawOutliers: " << argv[4] << endl;
+            ros::shutdown();
+            return EXIT_FAILURE;
+        }
+    }
+
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
-    SLAM = new ORB_SLAM2::System(argv[1],argv[2],ORB_SLAM2::System::MONOCULAR,true,scale);
+    SLAM = new ORB_SLAM2::System(argv[1],argv[2],ORB_SLAM2::System::MONOCULAR,true,scale,drawOutliers);
 
     igb = new ImageGrabber(SLAM, scale);
 
